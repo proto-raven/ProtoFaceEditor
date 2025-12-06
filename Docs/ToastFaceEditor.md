@@ -1,263 +1,363 @@
-﻿Toast Face Editor – Design Document (Current State)
+﻿ProtoFace / Toast Face Editor — Unified Design Specification
+1. Overview
 
-128×32 Protogen Visor Animation Tool for Toast
+The Toast Face Editor (ProtoFace Editor) is a Unity-based pixel animation tool used to create expressive faces for Toast’s 128×32 LED visor and coordinated animations for two external 480×480 cheek displays.
 
-Overview
+The editor outputs both:
 
-The Toast Face Editor is a Unity-based pixel-art and animation tool designed specifically for Toast’s 128×32 LED visor.
-It allows creating facial expressions, animations, and exporting them to formats readable by the MatrixPortal S3 visor hardware.
+Pixel animations (used by the visor)
 
-The editor intentionally mimics tools like Aseprite, but specialized for the visor resolution, workflow, and export needs.
+Metadata describing emotional behavior, triggers, and cheek display reactions
 
-Core Features (Fully Implemented)
-1. Pixel Drawing System
+The final result is a consistent emotional system running across:
 
-128×32 resolution (Toast visor size)
+MatrixPortal S3 (main 128×32 LED visor)
 
-Draw pixels with mouse (left click only)
+Left cheek ESP32-S3 round display
 
-Eraser tool
+Right cheek ESP32-S3 round display
 
-Horizontal mirror mode
+The editor is the authoritative source of:
 
-Color picker:
+Animation frames
 
-Color wheel (HSV hue & saturation)
+Frame order / FPS / loop mode
 
-Brightness slider (value)
+Emotional definitions
 
-Recent color swatches
+Sensor-trigger behavior
 
-Current color display
+Cheek display behavior
 
-2. Animation System
+The firmware interprets this exported data; the editor does not simulate sensors or runtime logic.
 
-Multiple frames
+2. Display Hardware
+2.1 Visor (Main Display)
 
-Add / Delete / Duplicate frame
+MatrixPortal S3 controlling a 128×32 RGB LED matrix
 
-Frame navigation (prev/next)
+Runs the emotional state machine
 
-Playback with FPS slider
+Reads:
 
-Onion skin:
+APDS-9960 nose sensor
 
-Shows previous frame
+Microphone
 
-Moves + zooms with canvas
+Accelerometer (LIS3DH)
 
-Adjustable opacity (in code)
+BLE remote commands
 
-3. Thumbnail Timeline
+2.2 Cheek Displays
 
-Displays one thumbnail per frame
+Two Waveshare ESP32-S3 2.8" IPS Round Displays (480×480)
+(Example product: The Pi Hut ESP32-S3 Round Display board)
 
-Click to jump to frame
+Capabilities:
 
-Drag & drop to reorder frames
+ESP32-S3 with BLE/WiFi
 
-Highlights active frame
+480×480 IPS screen
 
-4. Zoom & Pan
+PSRAM for smooth rendering
 
-Scroll wheel = zoom
+Capacitive touch (not required for core design)
 
-Right mouse drag = pan
+Role:
 
-Clamped movement inside workspace
+Emotion clients that render cheek expressions
 
-Uses UI masking to prevent overflow
+They do not compute emotion; they receive symbolic updates from MatrixPortal
 
-5. Per-Pixel Shader Grid Overlay
+3. Editor Architecture
+3.1 Core Pixel Editing
 
-Fully maskable (plays nice with WorkspacePanel)
+The existing editor provides:
 
-Ultra-thin cell borders around every pixel
+Pixel-level painting tools
 
-White/dark adaptive color depending on underlying brightness
+Color wheel + brightness + recent swatches
 
-Zoom-safe, crisp at any scale
+Onion skinning
 
-Toggleable in UI
+Zoom & pan
 
-Technical Architecture
-Major Scripts
-Script	Purpose
-ToastPixelEditor.cs	Core animation data, drawing logic, frame management, playback, onion skin, color application
-FrameThumbnailStrip.cs	Build and manage horizontally scrolling thumbnail bar
-FrameThumbnailItem.cs	Individual thumbnail + drag-to-reorder handling
-ColorWheelPicker.cs	HSV color wheel + brightness slider
-RecentColorSwatches.cs	List of last-used colors including UI buttons
-PixelZoomPan.cs	Handles zoom, pan, clamping, and synchronizing movement for PixelDisplay, OnionPrev, GridOverlay
-PixelGridOverlay.cs + Toast/PixelGridOverlay.shader	Per-pixel outlines using shader, mask-compatible
-WorkspacePanel	UI container with Mask to clip drawing region
-Unity UI Structure
-Canvas
- ├── AppBackground              (Panel / Image, full-screen background)
- │
- ├── TopBar                     (Panel / Image + HorizontalLayoutGroup)
- │     ├── BtnNewFrame          (Button)
- │     ├── BtnPrevFrame         (Button)
- │     ├── BtnNextFrame         (Button)
- │     ├── BtnDuplicateFrame    (Button)
- │     ├── BtnDeleteFrame       (Button)
- │     └── BtnPlayPause         (Button + Text/TMP)
- │           └── SliderFPS      (Slider)    if this is visually grouped with play
- │
- ├── WorkspacePanel             (Panel / Image + Mask)
- │     ├── PixelDisplay         (RawImage + ToastPixelEditor + PixelZoomPan)
- │     ├── OnionPrev            (RawImage)
- │     └── GridOverlay          (RawImage + PixelGridOverlay, shader material)
- │
- ├── BottomBar                  (Panel / Image)
- │     ├── ToggleMirrorX        (Toggle)
- │     ├── ToggleOnion          (Toggle)
- │     └── ToggleGrid           (Toggle)
- │
- ├── ThumbnailBar               (Panel / Image + HorizontalLayoutGroup)
- │     └── ThumbnailTemplate    (Button + Image + RawImage [ThumbImage])
- │          (disabled; used as prefab for runtime thumbnails)
- │
- └── ColorPanel                 (Panel / Image)
-       ├── LeftPanel            (Layout container)
-       │     ├── ColorWheelImage   (RawImage + ColorWheelPicker)
-       │     └── BrightnessSlider  (Slider)
-       │
-       └── RightPanel           (Layout container)
-             ├── CurrentColorDisplay (RawImage / Image)
-             ├── ToggleEraser        (Toggle)
-             └── SwatchPanel         (Layout container)
-                   ├── Swatch0       (Button)
-                   ├── Swatch1       (Button)
-                   ├── Swatch2       (Button)
-                   ├── Swatch3       (Button)
-                   ├── Swatch4       (Button)
-                   ├── Swatch5       (Button)
-                   ├── Swatch6       (Button)
-                   ├── Swatch7       (Button)
-                   ├── Swatch8       (Button)
-                   └── Swatch9       (Button)
+Grid overlay shader
 
-Known Good State
+Frame list with thumbnails
 
-Everything below is confirmed working together smoothly:
+Playback controls
 
-Drawing, erasing, mirroring
-Color wheel, brightness, recent colors
-Onion skin synchronized with zoom/pan
-Playback
-Thumbnails with drag-to-reorder
-UI masking: canvas, onion, and grid do not escape workspace
-Shader-driven pixel grid
-Zoom & pan smooth and well-behaved
+This remains the foundation.
 
-This is our “stable foundation” for new features.
+4. Animation / Emotion Library
 
-Next Features (Planned & Prioritized)
-Tier 1: High Priority
-1. Undo / Redo Stack
+The editor introduces the ability to define multiple independent animations, each describing:
 
-Required for safety during drawing
+A unique emotion or behavior
 
-Records pixel operations + frame changes
+A set of frames (subset of global frame bank)
 
-Probably using a command-based approach
+Timing + looping info
 
-2. Export System (for MatrixPortal)
+Layering information
 
-Export one animation as:
+Trigger metadata
 
-RAW frame sequence
+Cheek display metadata
 
-RGB565 binary
+Each animation includes:
 
-JSON metadata:
+id            (string)
+displayName   (string)
+fps           (number)
+loopMode      ("loop" | "once" | "pingPong")
 
-FPS
+region        ("fullFace" | "eyes" | "mouth" | "fx")
+layer         ("base" | "reaction" | "mouth" | "fx")
 
-Frame count
+frames:
+    startIndex
+    frameCount
 
-Emotion tag
+triggers:
+    baseEmotion
+    reaction
+    motion
+    audioMouth
 
-(Optional) GIF export for PC preview
+cheeks:
+    mode        ("emoji" | "colorPulse" | "custom")
+    emojiId     (string)
+    color       (hex string)
+    intensity   (0–1)
 
-3. Template / Guide Layer
+5. Layering Model
 
-Permanent visor outline
+Animations can occupy different compositing layers:
 
-Optional centerlines or expression landmarks
+5.1 Base Layer
 
-Togglable, non-exported
+The persistent emotional state
 
-Moves with zoom/pan
+Selected via BLE remote
 
-Tier 2: Medium Priority
-4. Additional Drawing Tools
+Example: neutral, happy, angry, sad
 
-Line tool
+5.2 Motion Layer
 
-Rectangle / filled rectangle
+Variants determined by head tilt / orientation
 
-Circle tool
+Examples: look_left, look_right, look_up, look_down
 
-Flood fill
+5.3 Reaction Layer
 
-Select/move tool (optional)
+Temporary animations triggered by sensors
 
-5. Workspace Polish
+Examples: boop_react, surprise_react, tap_react
 
-Tool icons
+5.4 Mouth Layer
 
-Clearer docking areas
+Frames representing mouth openness
 
-Proper button styles
+Controlled by microphone amplitude
 
-Zoom percentage indicator
+The firmware blends these layers into one final 128×32 frame.
 
-6. Multi-Onion Skin
+6. Trigger Metadata
 
-Show next frame + previous frame
+Each animation may define one or more trigger categories.
 
-Different tint colors
+6.1 Base Emotion Trigger
 
-Tier 3: Future Extensions
-7. Emotion Manager
+Used for persistent states via BLE remote.
 
-Define animations by emotion name
+baseEmotion:
+    enabled
+    bleCode      (integer)
 
-Auto-generate JSON file for MatrixPortal
+6.2 Reaction Trigger
 
-Support Bluetooth emotion switching
+Triggered by APDS gestures or accelerometer taps.
 
-8. Live Preview Mode
+reaction:
+    enabled
+    source       ("APDS" | "ACCEL" | "CUSTOM")
+    event        ("PROX_NEAR" | "GESTURE_LEFT" | "TAP" ...)
+    cooldownMs
+    priority
+    canInterruptBase
 
-Simulate visor curvature
+6.3 Motion Trigger
 
-Side LCD eye preview (future hardware)
+Selected automatically based on pitch, yaw, roll.
 
-9. Export Presets
+motion:
+    enabled
+    pitch: { min, max }
+    yaw:   { min, max }
+    roll:  { min, max }
+    priority
 
-“Export all animations”
+6.4 Audio Mouth Trigger
 
-“Export selected emotion”
+Maps microphone amplitude to mouth frames.
 
-“Export JSON only”
+audioMouth:
+    enabled
+    volumeMap[]: array of { maxLevel, frameIndex }
+    smoothingMs
 
-How to Resume Development With a New Chat
+7. Cheek Display Metadata
 
-Whenever you start a new ChatGPT session:
+Each animation includes a cheeks object that describes how cheek displays react.
 
-Paste only this:
+Example:
 
-This is continuing the Toast Face Editor Unity project.
+cheeks:
+    mode       ("emoji" | "colorPulse" | "custom")
+    emojiId    (symbolic id used by cheek firmware)
+    color      ("#RRGGBB")
+    intensity  (0–1)
 
-Here is the design doc summary:
-[Paste Tier 1 + Tier 2 sections only]
 
-Current task:
-<what we are building next>
+The editor defines this metadata; the cheeks render their own visuals.
 
+Optional Global Cheek Config
 
-That is all I need to be instantly back up to full context.
+The export may include configuration like:
 
-End of Design Doc
+cheekDisplayDefaults:
+    transport     ("BLE" | "WiFiUDP" | "UART")
+    leftAddress
+    rightAddress
+
+    emojiMap:
+        happy: { color: "#FFD966" }
+        angry: { color: "#FF4444" }
+        sad:   { color: "#66A3FF" }
+
+8. Export Pipeline
+
+The ProtoFace Editor exports two files:
+
+8.1 Frame Bank (Binary)
+
+frames.rgb565
+
+Contains all frames for all animations
+
+Packed in contiguous RGB565 format
+
+Indexed by startIndex + frameCount
+
+8.2 Metadata File (JSON)
+
+face_config.json
+
+Contains:
+
+Matrix resolution
+
+Frame bank info
+
+Animation library
+
+Trigger metadata
+
+Cheek display metadata
+
+Defaults
+
+Designed to be forward-compatible and extensible.
+
+9. Firmware Architecture (MatrixPortal)
+
+MatrixPortal S3:
+
+Loads the frame bank + JSON
+
+Reads all sensors:
+
+BLE remote
+
+APDS (boop/gesture)
+
+Microphone
+
+Accelerometer
+
+Computes emotional state:
+
+Base emotion
+
+Active reaction
+
+Motion variant
+
+Mouth frame
+
+Composes layers
+
+Renders final visor frame
+
+Sends emotion + cheek metadata to cheek displays
+
+10. Cheek Display Architecture
+
+Each cheek ESP32-S3 display:
+
+Connects to MatrixPortal via BLE/WiFi/UART
+
+Receives symbolic emotion updates:
+
+emotionId
+cheekMode
+emojiId
+color
+intensity
+
+
+Renders:
+
+Emoji icons
+
+Color pulses
+
+Custom animations
+
+Cheek displays do not handle sensors or emotional logic.
+
+11. Editor UI Additions (Future Work)
+
+The editor will gain:
+
+An “Animation Library” panel
+
+UI for region/layer selection
+
+Trigger metadata editors
+
+Cheek settings UI
+
+Export window
+
+The core painting interface remains unchanged.
+
+12. Summary
+
+The updated architecture ensures:
+
+No major future refactors
+
+Clear separation of concerns
+
+Simple export pipeline
+
+Multi-display emotional coherence
+
+Scalable rule-based animation activation
+
+Clean extensibility for new sensors or displays
+
+The ProtoFace Editor becomes a full emotional animation authoring suite for a distributed face system.
